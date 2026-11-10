@@ -1,0 +1,140 @@
+# bhyve-vm.conf.sample — bcachefsbox v3 VM, native declarative config (p1a).
+#
+# Consumed by bhyve(8) -k (our binary: /usr/local/libexec/bhyve-uartfix,
+# usage "[-k config_file]"). Format per bhyve(8) -k: "Each line of the
+# config file is expected to consist of a config variable name, an equals
+# sign ('='), and a value. No spaces are permitted between the variable
+# name, equals sign, or value. Blank lines and lines starting with '#' are
+# ignored." Inline trailing comments are NOT part of the format — comments
+# live on their own lines only. Variable reference: bhyve_config(5).
+#
+# Layering (README «Конфиги»): THIS file describes the GUEST (the
+# bhyve_config(5) variable tree). Lifecycle knobs of the orchestrator
+# (nice_priority, stop_wait_max, console) live in the SHELL config
+# /vm/bcachefs-box/bhyve.conf.
+#
+# Deploy: /vm/bcachefs-box/bhyve-vm.conf (phase 3 installs this sample there;
+# run-bcachefsbox.sh also seeds it from the adjacent sample on first run).
+# Runtime: the supervisor generates /var/run/bcachefsbox/vm.conf per launch
+# (console=off strips lpc.com1.*; a missing 9p config share strips
+# pci.0.10.0.*) and starts:
+#   bhyve -k /var/run/bcachefsbox/vm.conf bcachefsbox
+
+# --- GLOBAL SETTINGS / Architecture Neutral Settings (bhyve_config(5)) ---
+# name  "The name of the VM." Must equal the positional vmname passed by
+#        the supervisor (it is validated; the positional also OVERRIDES the
+#        conf value — see the launch comment in run-bcachefsbox.sh).
+name=bcachefsbox
+# cpus  "The total number of virtual CPUs."  (was: -c 4)
+cpus=4
+# memory.size  "Guest physical memory size in bytes. The value must be
+#        formatted as described in expand_number(3)."  (was: -m 4096M)
+memory.size=4096M
+# memory.wired  bhyve_config(5): "Wire guest memory" (== bhyve.8 -S; -S is
+#   MANDATORY with passthru, here it is policy): lock all guest pages
+#   resident so host swap pressure can never stall the NFS data plane.
+#   Trade-off: 4G unreclaimable; host pressure lands on other processes.
+#   (wifibox does NOT wire — their 128M appliance barely pages; our 4G
+#   storage VM under a swap-tight host is the exact use case.)
+memory.wired=true
+# bootrom  "Path to a boot ROM. ... If a boot ROM is present, a firmware
+#        interface device is also enabled for use by the boot ROM."
+#        (was: -l bootrom,...)
+bootrom=/usr/local/share/uefi-firmware/BHYVE_UEFI.fd
+
+# --- x86-Specific Settings (bhyve_config(5)) ---
+# x86.strictmsr=false  ==  bhyve(8) -w "Ignore accesses to unimplemented
+#   Model Specific Registers (MSRs)": "If this is false, writes are ignored
+#   and reads return zero."
+x86.strictmsr=false
+# x86.vmexit_on_hlt=true  ==  bhyve(8) -H "Yield the virtual CPU thread when
+#   a HLT instruction is detected": "Force a VM exit when a guest CPU
+#   executes the HLT instruction. This allows idle guest CPUs to yield the
+#   host CPU." (without it vCPUs burn 100% host CPU).
+x86.vmexit_on_hlt=true
+
+# --- PCI Device Settings (bhyve_config(5)) ---
+# "PCI devices are described by a device node named 'pci.bus.slot.function'
+# where each of bus, slot, and function are formatted as decimal values
+# with no padding. All PCI device nodes must contain a configuration
+# variable named 'device' ..."
+# Slot 0 — hostbridge: "usually configured at pci0:0:0 and is required by
+# most guest operating systems."
+pci.0.0.0.device=hostbridge
+
+# --- Block Device Settings (bhyve_config(5)): path "The path of the file or
+# disk device to use as the backing store." ---
+# Slot 2 — guest rootfs (raw image on the host).
+pci.0.2.0.device=virtio-blk
+pci.0.2.0.path=/vm/bcachefs-box/build/v03.raw
+# Slot 9 — state disk (v0.1 state plane: nfsdcld/ssh-keys/logs survive image swaps)
+##V0STATE-PARKED-1108 pci.0.9.0.device=virtio-blk
+##V0STATE-PARKED-1108 pci.0.9.0.path=/vm/bcachefs-box/build/v0-state.raw
+
+# Slots 3-4 — bcachefs POOL members. G8 (AGENTS, HARD BAN): roles are
+# pinned by SERIAL, never by adaN name — the 2026-11 re-platform flipped
+# ada0/ada1 while serials stayed. The supervisor G8-asserts each serial
+# (camcontrol) before EVERY attach; the paths here only point, the roles
+# live in the serial map inside run-bcachefsbox.sh.
+#   nda0 = KINGSTON SERIAL-NVME-P3-REPLACE-ME, p3 = bcachefs member (NVMe)
+# PHASE0-1108: pci.0.3.0.device=virtio-blk
+# PHASE0-1108: pci.0.3.0.path=/dev/nvme0p3-REPLACE-ME
+#   ada1 = TOSHIBA SERIAL-HDD-REPLACE-ME — whole disk, bcachefs member
+# PHASE0-1108: pci.0.4.0.device=virtio-blk
+# PHASE0-1108: pci.0.4.0.path=/dev/hdd-REPLACE-ME
+# Phase A (boot WITHOUT pool): comment out the four pci.0.{3,4}.0.* lines
+# above — the supervisor then boots poolless and skips G8/resctrl asserts.
+
+# --- Network Backend Settings (bhyve_config(5)): "Configuring a backend
+# requires setting the backend variable"; the type is inferred from the
+# value: pattern "tapN" → type tap. ---
+# --- VirtIO Network Interface Settings: mac "MAC address ... If specified,
+# it must be a unicast MAC address." The pinned MACs are baked into the
+# runbooks (rescue: ssh root@fe80::5054:ff:febe:ef01%tap1) — do NOT change.
+# Slot 5 — bench link (HOST-side tap1 172.31.255.1/30 MTU9000 is set by
+# net_asserts in the supervisor; guest mtu stays 1500 as in v2 — uncomment
+# to advertise the bench MTU to the guest).
+pci.0.5.0.device=virtio-net
+pci.0.5.0.backend=tap1
+pci.0.5.0.mac=52:54:00:be:ef:01
+#pci.0.5.0.mtu=9000
+# Slot 7 — LAN via bridge0 (tap2).
+pci.0.7.0.device=virtio-net
+pci.0.7.0.backend=tap2
+pci.0.7.0.mac=52:54:00:be:ef:02
+
+# --- VirtIO 9p Settings (bhyve_config(5)): sharename "The share name
+# exposed to the guest", path "The path of a directory on the host to
+# export to the guest", ro "If true, the guest filesystem is read-only." ---
+# Slot 10 — ro config share → the guest mounts it as /etc/bcachefsbox
+# (plan §2). COUPLING: the supervisor treats this exact path as OPTIONAL —
+# when the dir is missing it strips pci.0.10.0.* from the runtime conf with
+# a WARN (wifibox precedent) instead of letting bhyve abort on
+# open(O_DIRECTORY). Do not move the config share off slot 10.
+pci.0.10.0.device=virtio-9p
+pci.0.10.0.sharename=config
+pci.0.10.0.path=/vm/bcachefs-box/config
+pci.0.10.0.ro=true
+# Slot 11 — rw status share ← guest heartbeat TSV (dir is created by the
+# supervisor, root:wheel 755, before every launch).
+pci.0.11.0.device=virtio-9p
+pci.0.11.0.sharename=status
+pci.0.11.0.path=/var/run/bcachefsbox
+
+# --- LPC Device Settings (bhyve_config(5)): "The LPC bridge stores its
+# configuration under a top-level lpc node rather than under the PCI LPC
+# device's node." Slot 31 — lpc: "This device must be configured on bus 0."
+pci.0.31.0.device=lpc
+# --- UART Device Settings: path "Backend device for the serial port. Either
+# the pathname of a character device or 'stdio' to use standard input and
+# output of the bhyve(8) process." ---
+# COM1 = A side of the nmdm pair (logger/cu use the B side). nmdm(4) clones
+# the pair on first open — the node need not exist at validation time.
+# console=off strips this line from the runtime conf (no com1 at all).
+lpc.com1.path=/dev/nmdm-bcachefsboxA
+# Alternative: console on the bhyve process stdio instead of nmdm —
+#lpc.com1.path=stdio
+pci.0.3.0.device=virtio-blk
+pci.0.3.0.path=/dev/nvme0p3-REPLACE-ME
+pci.0.4.0.device=virtio-blk
+pci.0.4.0.path=/dev/hdd-REPLACE-ME

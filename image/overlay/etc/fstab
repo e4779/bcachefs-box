@@ -1,0 +1,2 @@
+tmpfs /var/lib/nfs tmpfs defaults,nosuid,mode=0755 0 0
+tmpfs /tmp tmpfs defaults,nosuid,mode=1777 0 0

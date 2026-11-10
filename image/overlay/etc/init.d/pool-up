@@ -1,0 +1,33 @@
+#!/sbin/openrc-run
+description="Mount bcachefs pool at /pool"
+
+depend() {
+	need sysfs
+	after localmount
+}
+
+start() {
+	ebegin "Waiting for pool device /dev/vdb"
+	i=0
+	while [ $i -lt 10 ] && [ ! -b /dev/vdb ]; do sleep 1; i=$((i+1)); done
+	if [ ! -b /dev/vdb ]; then
+		eend 1 "pool device /dev/vdb not found"
+		return 1
+	fi
+	ebegin "Loading bcachefs module"
+	modprobe bcachefs
+	rc=$?
+	eend $rc
+	[ $rc -ne 0 ] && return 1
+	ebegin "Mounting bcachefs pool at /pool"
+	mount -t bcachefs /dev/vdb /pool
+	rc=$?
+	eend $rc
+	return $rc
+}
+
+stop() {
+	ebegin "Unmounting bcachefs pool"
+	umount /pool
+	eend $?
+}

@@ -1,0 +1,19 @@
+#!/bin/busybox sh
+/bin/busybox --install -s /bin
+mount -t devtmpfs devtmpfs /dev
+mount -t proc proc /proc
+mount -t sysfs sysfs /sys
+busybox modprobe virtio_pci
+busybox modprobe virtio_blk
+busybox modprobe squashfs
+mkdir -p /newroot
+i=0
+while [ $i -lt 30 ]; do
+  if mount -t squashfs -o ro /dev/vda2 /newroot; then break; fi
+  sleep 1; i=$((i+1))
+done
+if ! grep -q newroot /proc/mounts; then echo 'FATAL: cannot mount sqfs root'; exec sh; fi
+mount --move /dev /newroot/dev
+mount --move /proc /newroot/proc
+mount --move /sys /newroot/sys
+exec switch_root /newroot /sbin/init
