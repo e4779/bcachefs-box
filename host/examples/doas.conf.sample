@@ -1,0 +1,37 @@
+# doas.conf.sample — privilege rules needed by the bcachefs-box host side.
+# Deploy: MERGE into /etc/doas.conf (pkg: security/doas; keep the file
+# root-owned, mode 0600).
+#
+# The supervisor (host/run-bcachefsbox.sh, deployed as
+# /vm/bcachefs-box/run-bcachefsbox.sh) RUNS AS ROOT: rc.d → daemon(8), and
+# bhyve/kldload/camcontrol need it anyway. It still routes every privileged
+# subcommand through doas -n(1) so the elevated call sites are explicit and
+# allow-listed. IMPORTANT: once /etc/doas.conf EXISTS, doas(1) no longer
+# applies its built-in implicit root permit — the first rule below is what
+# keeps the supervisor's doas -n calls working.
+
+permit nopass keepenv root
+
+# --- what the supervisor invokes via doas -n --------------------------------
+# stop protocol: SIGTERM the bhyve process (ACPI shutdown request)
+permit nopass root as root cmd /bin/kill
+# stop protocol + per-launch cleanup: --force-poweroff / --destroy
+permit nopass root as root cmd /usr/sbin/bhyvectl
+# net asserts (only when BENCH_* / LAN_* values are set in the lifecycle conf)
+permit nopass root as root cmd /sbin/ifconfig
+permit nopass root as root cmd /sbin/route
+# serial-pin guard: camcontrol identify before every pool-disk attach
+permit nopass root as root cmd /sbin/camcontrol
+# rw 9p status-share directory, (re)created before every launch
+permit nopass root as root cmd /usr/bin/install
+
+# --- operator lifecycle entry points ----------------------------------------
+# `doas service bcachefsbox onestart|onestop|status` (README "Running",
+# host/pool-stack-up.sh). NOTE: cmd without args matches ANY service —
+# tighten with explicit args lines if that bothers you.
+permit nopass keepenv :wheel as root cmd /usr/sbin/service
+# `doas sh pool-stack-up.sh` (cold-start ceremony) and manual
+# `doas sh run-bcachefsbox.sh --lint|--stop|--print-config` runs.
+# HONEST WARNING: this rule is root-by-invocation for whatever the script
+# does; that is inherent to a shell ceremony that mounts NFS and drives rc.d.
+permit nopass keepenv :wheel as root cmd /bin/sh

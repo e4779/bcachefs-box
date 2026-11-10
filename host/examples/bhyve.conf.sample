@@ -1,0 +1,62 @@
+# bhyve.conf.sample — bcachefsbox LIFECYCLE conf (sourced by /bin/sh).
+# Deploy: doas install -m 644 host/examples/bhyve.conf.sample /vm/bcachefs-box/bhyve.conf
+#
+# Layering (host/README.md, "Config layering"): THIS file tunes the
+# supervisor. The GUEST is described declaratively in bhyve-vm.conf.example
+# (bhyve_config(5)), fed to bhyve(8) via -k. Keys not set here keep the
+# built-in defaults shown in run-bcachefsbox.sh ("Lifecycle config" block).
+#
+# The sample ships ALL-OFF (every key commented out): no host networking is
+# touched, no serial pins are pre-loaded.
+
+# --- supervisor lifecycle (built-in defaults in parentheses) -----------------
+#nice_priority=15        # (15) nice(1) priority of bhyve, -20..20
+#stop_wait_max=60        # (60) ACPI stop grace, seconds, 1..60
+#console=log             # (log) off | log | cu
+
+# --- net asserts: host-network re-assertion EVERY loop iteration -------------
+# WARNING: setting ANY of these makes the supervisor reconfigure HOST
+# NETWORKING (ifconfig(8)/route(8)) on every supervise iteration, each
+# applied with `|| true` — a wrong value silently mangles your networking.
+# EMPTY (default) = that assert is SKIPPED; host networking untouched.
+# Prefer one-time setup in rc.conf(5) for LAN pieces; these asserts exist
+# for VM-private state that genuinely needs re-asserting after VM restarts.
+#
+# Bench tap — host end of the VM /30 (guest side: image/overlay,
+# 172.31.255.2/30). MTU parity with the guest is load-bearing (README F24):
+# if you set BENCH_MTU, set 9000 in BOTH the tap (here), the virtio device
+# (pci.0.5.0.mtu in bhyve-vm.conf) and the guest interface (overlay).
+#BENCH_TAP=tap1
+#BENCH_INET=172.31.255.1/30
+#BENCH_INET6=fe80::1/64
+#BENCH_MTU=9000
+#
+# LAN bridge — DEFAULTS REMOVED ON PURPOSE. The pre-release private script
+# burned its home LAN (bridge MAC, address, uplink NIC, gateway) into the
+# supervisor body; those are gone. Fill in YOUR values; TEST-NET-1 examples:
+#LAN_BRIDGE=bridge0
+#LAN_MEMBERS=tap2              # extra bridge members (space-separated)
+#LAN_UPLINK=em0                # physical NIC added as a member
+#LAN_INET=192.0.2.3/24         # TEST-NET-1 example — your LAN address
+#LAN_GATEWAY=192.0.2.1         # TEST-NET-1 example — your default router
+#LAN_MAC=02:00:00:aa:bb:cc     # bridge MAC (locally administered)
+
+# --- serial-pin guard (fail closed) ------------------------------------------
+# Every ACTIVE /dev/ virtio-blk path in bhyve-vm.conf MUST be pinned here by
+# disk serial (camcontrol), as space-separated device=serial pairs; device
+# is the basename WITHOUT partition suffix (nda0p3 -> nda0). Roles are
+# pinned by SERIAL, never by device name — a re-platform can flip names
+# under unchanged serials (the exact scar this guard grew from). An unknown
+# or unpinned device ABORTS the start; --lint checks pins too.
+# Get serials: doas camcontrol identify /dev/nda0
+#G8_SERIALS='nda0=SERIAL-OF-NVME-MEMBER ada1=SERIAL-OF-HDD-MEMBER'
+
+# --- overrides (only if you moved things) ------------------------------------
+#VMTAG=bcachefsbox
+#VMCONF=/vm/bcachefs-box/bhyve-vm.conf
+#BHYVE=/usr/local/libexec/bhyve-uartfix   # or /usr/sbin/bhyve (stock bhyve)
+#NMDM=/dev/nmdm-bcachefsbox
+#CONLOG=/var/log/bcachefsbox-console.log
+#CONFIG_SHARE_DIR=/vm/bcachefs-box/config
+#STATUS_SHARE_DIR=/var/run/bcachefsbox
+#RESCTRL_MARKER=/usr/local/libexec/vmm-resctrl-patched.marker

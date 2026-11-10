@@ -1,0 +1,115 @@
+#!/bin/sh
+#
+# bcachefsbox — rc.d wrapper for the bcachefs-box appliance supervisor.
+#
+# Repo source : host/rc.d/bcachefsbox
+# Deploy      : doas install -m 555 host/rc.d/bcachefsbox /usr/local/etc/rc.d/bcachefsbox
+# Supervisor  : /vm/bcachefs-box/run-bcachefsbox.sh (see host/README.md)
+#
+# start / stop honour bcachefsbox_enable in rc.conf(5);
+# onestart / onestop force the action regardless of the rcvar — the
+# cold-start ceremony (host/pool-stack-up.sh) uses onestart.
+#
+# ORDERING INVARIANT (rcorder): sshd BEFORE bcachefsbox — the operator must
+# keep shell access even when the VM stack wedges at boot. The optional
+# poolmount service (persistent NFS mount of /mnt/pool) must REQUIRE
+# bcachefsbox: its NFS server lives inside this VM.
+
+# PROVIDE: bcachefsbox
+# REQUIRE: sshd
+# KEYWORD: shutdown
+
+. /etc/rc.subr
+
+name="bcachefsbox"
+rcvar="bcachefsbox_enable"
+desc="bcachefs-box appliance VM supervisor (bhyve guest serving the pool over NFSv4)"
+
+load_rc_config "$name"
+: "${bcachefsbox_enable:=NO}"
+
+RUN=/vm/bcachefs-box/run-bcachefsbox.sh
+PIDFILE=/var/run/bcachefsbox.pid
+RUNLOG=/var/log/bcachefsbox-run.log
+VMNAME=bcachefsbox              # must match VMTAG in the supervisor
+NMDM=/dev/nmdm-bcachefsbox      # must match NMDM in the supervisor
+
+required_files="$RUN"
+
+supervisor_pid()
+{
+	pgrep -f 'run-bcachefsbo[x]' 2>/dev/null | head -n 1
+}
+
+bhyve_pid()
+{
+	pgrep -f 'bhyve.*bcachefsbo[x]' 2>/dev/null | head -n 1
+}
+# The [x] bracket in the patterns keeps pgrep/pkill from matching this
+# script's own command line.
+
+bcachefsbox_start()
+{
+	if [ -n "$(bhyve_pid)" ]; then
+		echo "${name}: bhyve already running (pid $(bhyve_pid))"
+		return 0
+	fi
+	echo "Starting ${name} (supervisor: ${RUN})"
+	/usr/sbin/daemon -p "$PIDFILE" -o "$RUNLOG" /bin/sh "$RUN"
+	sleep 6
+	if [ -z "$(bhyve_pid)" ]; then
+		echo "${name}: WARN bhyve not seen after 6 s — check ${RUNLOG}"
+	fi
+}
+
+bcachefsbox_stop()
+{
+	echo "Stopping ${name}"
+
+	# (1) Kill the SUPERVISOR loop first. kill -9, not TERM: POSIX sh runs a
+	#     trapped TERM only after the current foreground command completes —
+	#     up to a 120 s backoff sleep — and a live loop would RE-ATTACH the
+	#     pool disks on its next iteration. Half 1 of the single-writer gate.
+	if [ -f "$PIDFILE" ]; then
+		kill -9 "$(cat "$PIDFILE")" 2>/dev/null
+	fi
+	pkill -9 -f 'run-bcachefsbo[x]' 2>/dev/null
+	# Console logger: the cat(1) holding the nmdm B side outlives its parent.
+	pkill -9 -f "cat ${NMDM}B" 2>/dev/null
+
+	# (2) VM stop protocol: SIGTERM bhyve → ACPI grace (stop_wait_max) →
+	#     bhyvectl --force-poweroff → bhyvectl --destroy. Half 2 of the
+	#     single-writer gate: always destroy so the next start cannot hit a
+	#     stale vmm object.
+	sh "$RUN" --stop
+
+	# (3) Post-checks: nothing of ours may survive.
+	if [ -n "$(bhyve_pid)" ]; then
+		echo "${name}: WARN bhyve still running"
+	fi
+	if [ -c "/dev/vmm/${VMNAME}" ]; then
+		/usr/sbin/bhyvectl --vm="${VMNAME}" --destroy 2>/dev/null
+		echo "${name}: WARN stale vmm object — destroyed"
+	fi
+	if pgrep -f "cat ${NMDM}B" >/dev/null 2>&1; then
+		echo "${name}: WARN console cat still running"
+	fi
+	rm -f "$PIDFILE"
+}
+
+bcachefsbox_status()
+{
+	_bp=$(bhyve_pid)
+	if [ -n "$_bp" ]; then
+		echo "${name}: bhyve running (pid $_bp, supervisor pid $(supervisor_pid))"
+		return 0
+	fi
+	echo "${name}: not running"
+	return 1
+}
+
+start_cmd="bcachefsbox_start"
+stop_cmd="bcachefsbox_stop"
+status_cmd="bcachefsbox_status"
+
+run_rc_command "$1"
