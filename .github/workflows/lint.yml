@@ -30,7 +30,7 @@ jobs:
             sudo apt-get install -y --no-install-recommends shellcheck
           fi
 
-      - name: shellcheck host/*.sh image/*.sh
+      - name: shellcheck host/*.sh image/*.sh host/rc.d/*
         run: |
           # Scripts are POSIX sh (FreeBSD sh target); checked with the sh
           # dialect. Excluded codes — all three are the deliberate
@@ -45,4 +45,4 @@ jobs:
           #     lifecycle-conf contract
           shellcheck -s sh --severity=warning \
             -e SC2034 -e SC2223 -e SC1090 \
-            host/*.sh image/*.sh
+            host/*.sh image/*.sh host/rc.d/*

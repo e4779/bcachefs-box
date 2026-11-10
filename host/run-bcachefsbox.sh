@@ -39,7 +39,10 @@ export PATH
 # stock bhyve is fine on hosts it does not affect: override
 # BHYVE=/usr/sbin/bhyve in the lifecycle conf there). The patched binary is
 # -k-capable (its usage line is "[-k config_file]").
-: "${BHYVE:=/usr/local/libexec/bhyve-uartfix}"
+# Default to STOCK bhyve (a public recipe must boot on a stock install);
+# the uartfix build is opt-in: set BHYVE=/usr/local/libexec/bhyve-uartfix
+# in the lifecycle conf (see host/README.md for what it fixes).
+: "${BHYVE:=/usr/sbin/bhyve}"
 : "${NMDM:=/dev/nmdm-bcachefsbox}"
 : "${CONLOG:=/var/log/bcachefsbox-console.log}"
 NETASSERT_LOG=/var/log/netassert.log

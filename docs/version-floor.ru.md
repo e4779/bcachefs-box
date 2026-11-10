@@ -1,7 +1,7 @@
 > English version: [version-floor.md](version-floor.md).
 # Археология: сборка bcachefs DKMS + баг «отсутствие дрейна»
 
-Дата отчёта: 2026-11-08. Метод: read-only раскопки (memory.recall global, rg по ~/.pi/agent/sessions, git -S/--grep по ~/projects/homelab, kn bundles, memos MCP). Ничего не изменено (отчёт в /tmp — единственная запись).
+Дата отчёта: 2026-11-08. Метод: read-only раскопки (memory.recall global, rg по private-tooling, git -S/--grep по ~/projects/homelab, kn bundles, memos MCP). Ничего не изменено (отчёт в /tmp — единственная запись).
 
 ## VERDICT
 
@@ -21,7 +21,7 @@
 
 1. **Устная история оператора, дословно** — сессия `01a1b6af` (2026-11-07T15:45, lineage root текущей ветки): «мы 1.39 собирали актуальный тогда, забирали из репозитория - столкнулись с багом отсутствием дрейна. Поэтому - собирать и для дебиана модуль надо и для alpine».
 2. **Письменная дистилляция** — коммит `6c56fb4` (2026-11-08) `docs(bcachefs): module provenance`: «DKMS 1.39.7 в план-Б — НАША сборка из репозитория Кента... на ней словили баг отсутствия дрейна (устная история оператора, письменного трейса нет — rg/memory пусты)»; там же: «Версия = осознанный пин (пол: выше фикса дрейна; для G8: >= 1.39)». Дубли: `docs/freebsd/proposals/2026-11-06-bcachefsbox-appliance.md:27-32`, `docs/org-tasks.org:55`.
-3. **Первичный инцидент (deadlock, очередь не уходит)** — runbook `docs/debian/25-bcachefs-upgrade-1.39.md` (коммит `caf269a` от 2026-09-06; файл удалён из рабочего дерева `faf5959`, жив в git): «В августе это привело к полному deadlock'у reconcile (застревание в `blk_mq_get_tag` при заполненном NVMe, очередь 1 TB стояла неделю)»; «Наблюдалось дважды: 2026-08-09 (600 GB...) и 2026-09-06 (18.6M застрявших buckets)»; «С подробным разбором в истории сессий ZCode от 2026-08-08..09 и 2026-09-06».
+3. **Первичный инцидент (deadlock, очередь не уходит)** — runbook `docs/debian/25-bcachefs-upgrade-1.39.md` (коммит `caf269a` от 2026-09-06; файл удалён из рабочего дерева `faf5959`, жив в git): «В августе это привело к полному deadlock'у reconcile (застревание в `blk_mq_get_tag` при заполненном NVMe, очередь 1 TB стояла неделю)»; «Наблюдалось дважды: 2026-08-09 (600 GB...) и 2026-09-06 (18.6M застрявших buckets)»; «С подробным разбором в истории сессий the assistant от 2026-08-08..09 и 2026-09-06».
 4. **Фикс-версия 1.39.0** — тот же runbook, цитата release notes (см. VERDICT); формат 1.39 = `per_dev_fragmentation_lru`.
 5. **Верификация фикса на 1.39.4** — коммиты `9d324bf` (2026-09-06, «DKMS built clean for 7.1.3»), `a061ea8` (2026-09-06, «queue draining... writeback Leaving 203→166 GB in ~4 min»), `776d41d` (2026-09-07, «backlog drained in 15h: 190GB→537MB, zero bad_data_type»).
 6. **Сборка 1.39.7 в план-Б** — сессия `01a1a45c` (2026-11-04T02:21): dpkg-факт «bcachefs-kernel-dkms 1:1.39.7 / bcachefs-tools 1:1.39.7» на guest 7.2.9+deb13; коммиты `89b4849` (ca-certificates перед apt.bcachefs.org), `7785a9d` (dkms headers Deps), `746301e` (v3 orchestrator, in-guest build) — все 2026-11-04; манифест совместимости `0b9bf62` (2026-11-06): «DKMS 1.39.7 — собран и под 7.2.9, и под 7.2.11».
@@ -30,7 +30,7 @@
 
 ## Первичные Aug/Sep-сессии: где они
 
-На the lab host диска нет: `ls ~/.pi/agent/sessions/*/2026-0*.jsonl` = 0. Memory-провайдер держит cross-machine источники (`memory-source:thinkpad/...`, `memory-source:the lab host-debian/...`) — но только октябрьские; Aug/Sep ZCode-сессии в локальном индексе отсутствуют (memory.sessions: не найдены). Их содержимое пережило в: runbook 25 (полный разбор), цитатах в сессиях 2026-10-19/25/31, коммитах caf269a/9d324bf/a061ea8/776d41d.
+На the lab host диска нет: `ls private-tooling = 0. Memory-провайдер держит cross-machine источники (`memory-source:the laptop stand/...`, `memory-source:the lab host-debian/...`) — но только октябрьские; Aug/Sep the assistant-сессии в локальном индексе отсутствуют (memory.sessions: не найдены). Их содержимое пережило в: runbook 25 (полный разбор), цитатах в сессиях 2026-10-19/25/31, коммитах caf269a/9d324bf/a061ea8/776d41d.
 
 ## Похожие, но ДРУГИЕ «no drain» (near-misses, чтобы не спутать)
 
@@ -43,8 +43,8 @@
 
 ## Exhausted surfaces
 
-1. memory.recall scope:global ×9 формулировок (RU+EN: dkms build, дрейн/drain, shutdown, koverstreet, 1.39, зависание, rust tools, trigger_gc, ZCode) — все top-hits ведут к найденному выше, первичных Aug/Sep нет.
-2. rg по ~/.pi/agent/sessions: 'дрейн|dkms|koverstreet' (30 файлов), '\bdrain' counts (top-15), 'blk_mq_get_tag' (3 файла), 'rootfs2', '1\.39\.7', 'apt\.bcachefs\.org', 'mount -t bcachefs' — покрыто.
+1. memory.recall scope:global ×9 формулировок (RU+EN: dkms build, дрейн/drain, shutdown, koverstreet, 1.39, зависание, rust tools, trigger_gc, the assistant) — все top-hits ведут к найденному выше, первичных Aug/Sep нет.
+2. rg по private-tooling 'дрейн|dkms|koverstreet' (30 файлов), '\bdrain' counts (top-15), 'blk_mq_get_tag' (3 файла), 'rootfs2', '1\.39\.7', 'apt\.bcachefs\.org', 'mount -t bcachefs' — покрыто.
 3. git: --grep bcachefs/1.39, -S dkms, -S дрейн, -i -S drain, -- docs/debian — покрыто; docs/debian удалены (faf5959), читал из истории.
 4. kn bundles: rg 'bcachefs|дрейн' — 5 файлов, релевантен только ENOTTY (другой баг).
 5. Memos MCP: 0.

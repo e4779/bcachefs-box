@@ -115,8 +115,12 @@ apk add --root "$ROOT" \
 cp -a "$OVERLAY"/. "$ROOT"/
 
 # Every runlevel symlink must resolve, or the boot shows red services.
+# Targets are absolute (/etc/init.d/x) — resolve them against $ROOT, not the
+# builder host: [ -e "$link" ] would follow the symlink in the builder's own
+# /etc and die unconditionally (found by the verification council).
 for link in "$ROOT"/etc/runlevels/*/*; do
-	[ -e "$link" ] || die "runlevel symlink with a missing target: ${link#"$ROOT"} (is the service's package installed?)"
+	target="$ROOT$(readlink "$link")"
+	[ -e "$target" ] || die "runlevel symlink with a missing target: ${link#"$ROOT"} -> $target (is the service's package installed?)"
 done
 
 # --- 4. mountpoints baked into the image (F17) ---------------------------------------

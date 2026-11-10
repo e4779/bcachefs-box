@@ -7,6 +7,11 @@ An immutable, reproducible guest image in the spirit of
 lifecycle, the guest is a sealed 163 MB squashfs appliance with exactly one job —
 keep your bcachefs pool mounted and exported.
 
+The host and the guest talk over a dedicated point-to-point link (the
+"bench net", 172.31.255.0/30 over a tap interface): NFSv4 for the data plane,
+the serial console for everything else. No guest SSH by design — the appliance
+has one job and no interactive surface beyond the host-gated console.
+
 Built and proven on a real 4.4 TB two-member pool (NVMe + HDD) as an
 alternative stack to the bcachefs FUSE port.
 
@@ -65,7 +70,7 @@ to prevent. Put your own disk serials into the guards before first start
 |---|---|
 | Full chain alive | UKI → squashfs → OpenRC → pool-up → NFSv4 → host consumers — rehearsal console: [docs/evidence/console-alpine-poolup.log](docs/evidence/console-alpine-poolup.log) |
 | Throughput | **two stands, not comparable — never averaged:** appliance stand single-stream spot-read 3 MiB / 0.0198 s ≈ 159 MB/s through the full stack (incl. host NFS client); bridge-bench stand 570 MB/s seq-read (dd 1 GiB, cold, MTU 9000) — [docs/bridge-comparison.md](docs/bridge-comparison.md) |
-| Soak | overnight, 40 × 10-min samples all green: `nfs_err_delta=0` in every sample (no timeouts / no retransmits), NFS client RPC counter 77k → 9.6M — [docs/evidence/soak-metrics.tsv](docs/evidence/soak-metrics.tsv) |
+| Soak | overnight, 43 × 10-min samples all green: `nfs_err_delta=0` in every sample (no timeouts / no retransmits), NFS client RPC counter 77k → 10.1M — [docs/evidence/soak-metrics.tsv](docs/evidence/soak-metrics.tsv) |
 | Resilience | survived a host root-fs-full incident mid-soak without a scratch (the 7.5 h sampler gap in the soak file sits in that window; no dedicated incident write-up was preserved) |
 | Self-healing | pool recovered from an accidental dual-writer window: 6 recovery passes, ~7.5 h, damage = 2 checksum errors, zero data loss |
 | Cold start | one-script bring-up — [host/pool-stack-up.sh](host/pool-stack-up.sh): `service bcachefsbox onestart` → grace wait → NFS mount → sanity check; back after a host reboot without a rebuild |
@@ -97,7 +102,7 @@ image/                     guest image recipe
     fstab, modules, ...
 docs/                      run reports (spike, module, NFS plane, alpha run,
                            drain-bug archaeology — why the version floor exists),
-                           FINDINGS.md (full findings index), HOST-SETUP.md
+                           FINDINGS.md (full findings index), host/README.md
                            (host prerequisites: bridge/tap, rc.conf, doas),
                            evidence/ (sanitized console captures, soak metrics)
 ```
@@ -132,7 +137,7 @@ chroot; an Alpine chroot inside the builder for musl-exact tooling).
 ## Running
 
 ```sh
-# one-time: host prerequisites (bridge/tap, rc.conf, doas rules): docs/HOST-SETUP.md
+# one-time: host prerequisites (bridge/tap, rc.conf, doas rules): host/README.md
 #           edit host/bhyve-vm.conf.example → /vm/bcachefs-box/bhyve-vm.conf
 #           put YOUR disk serials in the supervisor's guards
 doas service bcachefsbox onestart       # VM boots, pool-up mounts, pool-nfs exports

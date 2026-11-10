@@ -31,14 +31,14 @@ BASEURL="https://evilpiepirate.org/bcachefs-tools"
 # Kent's tree, pin explicitly") has no meaning if the pin is optional.
 # Fetch the hash over a trusted channel and cross-check it, e.g.:
 #     curl -fsSL "$BASEURL/bcachefs-tools-$VER.tar.zst" | sha256sum
-SUM=""
+SUM="a2c7a790431f291f8fa0cab573c6b7c51e9ab97ea7ca13386a5d30e18604ee89"
 
 # --- target kernel ----------------------------------------------------------
 # Must equal the appliance kernel exactly — vermagic is asserted at the end.
 # The matching linux-lts + linux-lts-dev (headers under /usr/src) must be
 # installed in this chroot.
 KVER="6.18.62-0-lts"
-VIRMAGIC="$KVER SMP preempt mod_unload modversions"
+vermagic="$KVER SMP preempt mod_unload modversions"
 
 # --- locations ----------------------------------------------------------------
 WORK="${WORK:-/tmp/bcachefs-kmod-build}"
@@ -82,7 +82,7 @@ KO="$STAGE/fs/bcachefs/bcachefs.ko"
 [ -f "$KO" ] || die "no $KO — the build produced no module"
 got=$(modinfo -F vermagic "$KO" 2>/dev/null) || \
 	got=$(strings "$KO" | sed -n 's/^vermagic=//p' | head -n 1)
-[ "$got" = "$VIRMAGIC" ] \
-	|| die "vermagic mismatch: got '$got', want '$VIRMAGIC' (headers in /usr/src/linux-headers-$KVER do not match KVER — fix the chroot)"
+[ "$got" = "$vermagic" ] \
+	|| die "vermagic mismatch: got '$got', want '$vermagic' (headers in /usr/src/linux-headers-$KVER do not match KVER — fix the chroot)"
 
 printf 'kmod-build: OK: %s\n' "$KO"

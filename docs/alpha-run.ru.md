@@ -1,7 +1,6 @@
-> English version: [alpha-run.md](alpha-run.md).
 # α-LIVE RUN REPORT — FUSE→VM переключение на живом G8 (2026-11-09)
 
-Статус: IN PROGRESS — пул в глубоком recovery (deep passes), см. финал.
+Статус: ЗАВЕРШЕНО УСПЕХОМ (2026-11-10 00:40) — см. финал отчёта; English: [alpha-run.md](alpha-run.md).
 
 ## Прогресс церемонии
 1. ✅ Квитирование: p2p (amuled/amutorrent/qbt/stash/navidrome) + poolfuse +
