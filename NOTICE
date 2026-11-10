@@ -1,0 +1,46 @@
+NOTICE
+======
+
+bcachefs-box — run a bcachefs storage pool in a Linux appliance VM on
+FreeBSD bhyve and serve it back to the host over NFSv4.
+https://github.com/e4779/bcachefs-box
+
+1. Original code — ISC
+
+   Everything in this repository not listed below is original work by
+   Nikolay Ermakov and is licensed under the ISC License (see LICENSE).
+
+2. Ported helpers from freebsd-wifibox — BSD-2-Clause
+
+   host/run-bcachefsbox.sh re-implements, in POSIX-sh form, two pieces of
+   the freebsd-wifibox supervisor:
+
+     - the internal-defaults-then-source-the-conf pattern of
+       load_bhyve_conf_values() (upstream sbin/wifibox:244-265), used for
+       the lifecycle conf (nice_priority, stop_wait_max, console);
+     - the assert_value_wellformed() / assert_value_ranged_integer() /
+       assert_value_yesno() validation helpers (upstream
+       sbin/wifibox:510-555), renamed assert_wellformed() /
+       assert_ranged_int() and adapted to this script's log/die
+       primitives.
+
+   freebsd-wifibox is copyright (c) 2021-26, PÁLI Gábor János and is
+   licensed under the BSD-2-Clause License; this notice satisfies its
+   redistribution conditions. Upstream:
+   https://github.com/pgj/freebsd-wifibox
+   (The image-pipeline reference freebsd-wifibox-alpine is the same
+   author and license; its pattern is borrowed but no code is copied
+   from it.)
+
+   The ported helpers are derived from the BSD-licensed upstream; all
+   other code in this repository remains under ISC as above.
+
+3. Built artifacts — GPL-2.0-only
+
+   The guest kernel module bcachefs.ko is built by image/kmod-build.sh
+   from the bcachefs source tree (https://github.com/koverstreet/bcachefs,
+   Kent Overstreet's tree); the bcachefs-tools userspace it stages comes
+   from the same project. Both are Linux-kernel-lineage code licensed
+   GPL-2.0-only. No binary is committed to this repository; artifacts
+   you build from this recipe are GPL-2.0-only and are NOT covered by
+   this repository's ISC license.

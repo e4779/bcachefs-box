@@ -1,0 +1,48 @@
+# lint.yml — CI floor for bcachefs-box (shellcheck only).
+#
+# HONEST SCOPE NOTE: the repo's real acceptance test is
+#   host/run-bcachefsbox.sh --lint
+# (validates the bhyve -k conf tree, PCI paths, disk-serial guards,
+# console modes). That needs a FreeBSD host — bhyve userspace, rc.subr,
+# camcontrol and the /usr/local/libexec helpers do not exist on the
+# ubuntu CI image — so CI here is shellcheck-only: a static syntax and
+# idiom floor, NOT --lint. Re-run --lint on a FreeBSD host whenever the
+# host/ or image/ scripts move.
+
+name: lint
+
+on:
+  push:
+    paths: ['host/**', 'image/**', '.github/workflows/lint.yml']
+  pull_request:
+    paths: ['host/**', 'image/**', '.github/workflows/lint.yml']
+
+jobs:
+  shellcheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: ensure shellcheck
+        run: |
+          if ! command -v shellcheck >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y --no-install-recommends shellcheck
+          fi
+
+      - name: shellcheck host/*.sh image/*.sh
+        run: |
+          # Scripts are POSIX sh (FreeBSD sh target); checked with the sh
+          # dialect. Excluded codes — all three are the deliberate
+          # rc.subr / wifibox config contract, not accidents:
+          #   SC2034: variables assigned here but consumed only across the
+          #     sourced lifecycle-conf / rc.d wrapper boundary look "unused"
+          #     to single-file analysis
+          #   SC2223: POSIX default-assignment idiom `: "${VAR:=default}"` —
+          #     intentional internal-defaults-before-`. "$CONF"` layering
+          #     (the wifibox load_bhyve_conf_values pattern)
+          #   SC1090: `. "$CONF"` — the non-constant source path IS the
+          #     lifecycle-conf contract
+          shellcheck -s sh --severity=warning \
+            -e SC2034 -e SC2223 -e SC1090 \
+            host/*.sh image/*.sh

@@ -30,7 +30,7 @@ flowchart TB
     subgraph HOST["FreeBSD host"]
         CONS["consumers<br/>(media server, p2p, ...)"]
         MNT["/mnt/pool"]
-        SUP["VM supervisor<br/>(serial guards, heartbeat)"]
+        SUP["VM supervisor<br/>(serial guards, supervise loop; heartbeat: roadmap)"]
         TAP["tap1 — bench net /30, MTU 9000"]
     end
     subgraph VM["bhyve VM"]
@@ -50,24 +50,42 @@ flowchart TB
     KO --- DISKS
 ```
 
+**Pool-disk guards.** Before every VM start the supervisor asserts each
+passthrough path's device serial against the serials of the production pool
+disks (the NVMe member and the HDD member) recorded in the lifecycle config,
+and refuses to start the VM on any mismatch. Devices are identified by
+slot + serial, never by name — `ada*`/`nda*` naming shifts with driver probe
+order, and a wrong-name `dd` is exactly the accident class this guard exists
+to prevent. Put your own disk serials into the guards before first start
+(see *Running*).
+
 ## Proven on real hardware (2026-11 alpha run)
 
 | Claim | Evidence |
 |---|---|
-| Full chain alive | UKI → squashfs → OpenRC → pool-up (2-member, rw) → NFSv4 → host consumers |
-| Throughput | 158 MB/s single-stream read through the whole stack |
-| Soak | 8+ h, 6M+ NFS RPCs, **0 timeouts / 0 retries** (10-min metric samples all green) |
-| Resilience | survived a host root-fs-full incident mid-soak without a scratch |
+| Full chain alive | UKI → squashfs → OpenRC → pool-up → NFSv4 → host consumers — rehearsal console: [docs/evidence/console-alpine-poolup.log](docs/evidence/console-alpine-poolup.log) |
+| Throughput | **two stands, not comparable — never averaged:** appliance stand single-stream spot-read 3 MiB / 0.0198 s ≈ 159 MB/s through the full stack (incl. host NFS client); bridge-bench stand 570 MB/s seq-read (dd 1 GiB, cold, MTU 9000) — [docs/bridge-comparison.md](docs/bridge-comparison.md) |
+| Soak | overnight, 40 × 10-min samples all green: `nfs_err_delta=0` in every sample (no timeouts / no retransmits), NFS client RPC counter 77k → 9.6M — [docs/evidence/soak-metrics.tsv](docs/evidence/soak-metrics.tsv) |
+| Resilience | survived a host root-fs-full incident mid-soak without a scratch (the 7.5 h sampler gap in the soak file sits in that window; no dedicated incident write-up was preserved) |
 | Self-healing | pool recovered from an accidental dual-writer window: 6 recovery passes, ~7.5 h, damage = 2 checksum errors, zero data loss |
-| Cold start | full stack back after a host reboot in a 3-minute ceremony |
+| Cold start | one-script bring-up — [host/pool-stack-up.sh](host/pool-stack-up.sh): `service bcachefsbox onestart` → grace wait → NFS mount → sanity check; back after a host reboot without a rebuild |
 
-Full story with the incident write-up: [docs/ALPHA-RUN-REPORT.md](docs/ALPHA-RUN-REPORT.md).
+Arithmetic note: 3 MiB = 3,145,728 B; 3 MiB / 0.0198 s = 158.9 MB/s
+(decimal MB/s). Earlier notes showing "151.5 MB/s" divided 3,000,000 B —
+the measurement is the same, the unit convention wasn't. "158" elsewhere
+in the docs is this same number, truncated.
+
+Full story with the incident write-up: [docs/alpha-run.md](docs/alpha-run.md).
+Committed evidence (sanitized console captures + soak metrics):
+[docs/evidence/](docs/evidence/).
 
 ## Repository layout
 
 ```
 host/                      FreeBSD host side
-  run-bcachefsbox.sh       VM supervisor: declarative conf, serial guards, heartbeat
+  run-bcachefsbox.sh       VM supervisor: declarative conf, serial guards, supervise loop
+  pool-stack-up.sh         cold-start ceremony: rc.d onestart → NFS mount → sanity check
+  rc.d/bcachefsbox         rc.d wrapper (one-time copy to /usr/local/etc/rc.d/)
   bhyve-vm.conf.example    sanitized VM config (disk slots, bench-net tap)
 image/                     guest image recipe
   kmod-build.sh            bcachefs.ko from Kent's tarball, against linux-lts headers
@@ -77,8 +95,11 @@ image/                     guest image recipe
     init.d/pool-nfs        OpenRC: rpcbind (foreground) → exportfs → mountd → nfsd
     network/interfaces     static bench-net IP, MTU 9000 (see findings F24!)
     fstab, modules, ...
-docs/                      run reports: spike, module, NFS plane, alpha run,
-                           drain-bug archaeology (why the version floor exists)
+docs/                      run reports (spike, module, NFS plane, alpha run,
+                           drain-bug archaeology — why the version floor exists),
+                           FINDINGS.md (full findings index), HOST-SETUP.md
+                           (host prerequisites: bridge/tap, rc.conf, doas),
+                           evidence/ (sanitized console captures, soak metrics)
 ```
 
 ## Building the image
@@ -111,7 +132,8 @@ chroot; an Alpine chroot inside the builder for musl-exact tooling).
 ## Running
 
 ```sh
-# one-time: edit host/bhyve-vm.conf.example → /vm/bcachefs-box/bhyve-vm.conf
+# one-time: host prerequisites (bridge/tap, rc.conf, doas rules): docs/HOST-SETUP.md
+#           edit host/bhyve-vm.conf.example → /vm/bcachefs-box/bhyve-vm.conf
 #           put YOUR disk serials in the supervisor's guards
 doas service bcachefsbox onestart       # VM boots, pool-up mounts, pool-nfs exports
 
@@ -119,7 +141,9 @@ doas service bcachefsbox onestart       # VM boots, pool-up mounts, pool-nfs exp
 doas mount -t nfs -o nfsv4,nconnect=4 172.31.255.2:/pool /mnt/pool
 ```
 
-After a host reboot (bring-up ceremony): start VM → mount → consumers.
+After a host reboot, run the whole bring-up as one script:
+`doas sh host/pool-stack-up.sh` (start VM → grace wait → NFS mount →
+sanity check), then start consumers as needed.
 `rpc.statd` is deliberately omitted (NFSv4 has no NSM/NLM); `rpcbind` is
 spawned in the foreground by `pool-nfs` — busybox `start-stop-daemon`
 silently kills daemonizing rpcbind (F22).
@@ -130,7 +154,7 @@ silently kills daemonizing rpcbind (F22).
   Distros lag; the on-disk format is a one-way ratchet.
 - **Floor = 1.39** for pools created/upgraded by 1.39-era stacks
   (`per_dev_fragmentation_lru` — the fix for the reconcile/copygc deadlock;
-  see [docs/DRAIN-ARCHAEOLOGY.md](docs/DRAIN-ARCHAEOLOGY.md)).
+  see [docs/version-floor.md](docs/version-floor.md)).
 - bcachefs left the Linux mainline between v6.17 and v6.18 — on 6.18+ the
   module is out-of-tree **by necessity**, not by choice (F15).
 - A `rw` mount by version N ratchets the on-disk format to N: older stacks
@@ -147,18 +171,33 @@ silently kills daemonizing rpcbind (F22).
 | F24 | **MTU parity host↔guest** — a mismatch shows up as unkillable `mount_nfs` reconnect zombies holding a per-server lock (diagnose with `tcpdump` + `procstat -k`, never by re-trying the mount) |
 | F26 | quiesce inventories: `service -e`, not selective greps — a hidden watchdog re-raised a FUSE mount on top of the VM's disks → dual-writer → 7.5 h recovery |
 
-Full index in the docs/ reports.
+Full index: [docs/FINDINGS.md](docs/FINDINGS.md).
 
 ## Credits
 
 - [pgj/freebsd-wifibox](https://github.com/pgj/freebsd-wifibox) and
   [freebsd-wifibox-alpine](https://github.com/pgj/freebsd-wifibox-alpine) —
-  the appliance pattern, the Alpine image pipeline this project borrows from.
+  the appliance pattern, the Alpine image pipeline this project borrows from
+  (BSD-2-Clause; ported helpers attributed in [NOTICE](NOTICE)).
 - [koverstreet/bcachefs](https://github.com/koverstreet/bcachefs) — the
   filesystem and the kernel module source of truth.
+
+## License & attribution
+
+This repository's code is ISC — see [LICENSE](LICENSE). [NOTICE](NOTICE)
+covers the rest: the supervisor ports two helper groups from
+freebsd-wifibox (BSD-2-Clause, © Páli Gábor János), and built artifacts
+(`bcachefs.ko`, bcachefs-tools) are GPL-2.0-only from Kent's tree and are
+not covered by this repo's license.
 
 ## Status
 
 Experiment concluded viable (2026-11); archived as a reference recipe.
 Production went the bcachefs-FUSE-port route — this stack remains a proven
 fallback/DR path and a benchmark platform.
+
+Roadmap (not shipped): the guest→host heartbeat over the status share is
+designed and appears in rehearsal console captures
+([docs/evidence/](docs/evidence/)), but is **not** part of the committed
+guest overlay. The shipped supervision story is the supervisor's serial
+guards plus the bhyve exit-status supervise loop, nothing more.
