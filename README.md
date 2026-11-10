@@ -20,6 +20,8 @@ alternative stack to the bcachefs FUSE port.
   swap plus a VM reboot.
 - The kernel module is **always built from Kent Overstreet's source tree**
   (never a distro package), pinned explicitly. See *Version policy*.
+- The host bridge is NFSv4, not 9p — measured, not guessed:
+  [docs/why-nfs-not-9p.md](docs/why-nfs-not-9p.md).
 
 ## Architecture
 
