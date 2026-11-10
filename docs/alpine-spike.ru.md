@@ -1,3 +1,4 @@
+> English version: [build-findings.md](build-findings.md).
 # V0.3 STEP 2 REPORT — Alpine spike (2026-11-08)
 
 ## Результат: Alpine appliance ЗАГРУЖАЕТСЯ (wifibox-verbatim путь)

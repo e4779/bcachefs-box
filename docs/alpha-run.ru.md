@@ -1,3 +1,4 @@
+> English version: [alpha-run.md](alpha-run.md).
 # α-LIVE RUN REPORT — FUSE→VM переключение на живом G8 (2026-11-09)
 
 Статус: IN PROGRESS — пул в глубоком recovery (deep passes), см. финал.

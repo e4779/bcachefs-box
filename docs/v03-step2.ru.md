@@ -1,3 +1,4 @@
+> English version: [build-findings.md](build-findings.md).
 # V0.3 STEP 2 REPORT — bcachefs-модуль из дерева Кента + pool-up (2026-11-08, вечер)
 
 ## Результат: GATE PASSED

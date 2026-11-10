@@ -1,3 +1,4 @@
+> English version: [version-floor.md](version-floor.md).
 # Археология: сборка bcachefs DKMS + баг «отсутствие дрейна»
 
 Дата отчёта: 2026-11-08. Метод: read-only раскопки (memory.recall global, rg по ~/.pi/agent/sessions, git -S/--grep по ~/projects/homelab, kn bundles, memos MCP). Ничего не изменено (отчёт в /tmp — единственная запись).
@@ -10,7 +11,7 @@
 
 **Фикс дрейна (версия/коммит): bcachefs 1.39.0** — архитектурное исправление «fragmentation LRU used by copygc is now per device instead of filesystem wide. This solves long standing contention issues between reconcile and copygc, particularly with tiered setups» (цитата 1.39.0 release notes через runbook 25). Подтверждено практикой: апгрейд пула 1.38.8→1.39.4 (DKMS с apt.bcachefs.org, ядро 7.1.3) 2026-09-06: writeback 190 GB → 537 MB за 15 ч, bad_data_type = 0.
 
-**Модуль 1.39.7 (план-Б rootfs2.raw, Debian guest, host hlab)** собран/поставлен 2026-11-03..04 (DKMS bcachefs-kernel-dkms 1:1.39.7 + tools 1:1.39.7, dkms 3.2.2; источник — репозиторий Кента apt.bcachefs.org; далее директива: собирать из исходников Кента одним деревом для обеих линий Debian+Alpine). 1.39.7 > 1.39.0 — фикс дрейна в нём есть; «пол: выше фикса дрейна» в директиве — именно про это. Символический коммит фикс-семейства — тег/релиз 1.39.0 (per_dev_fragmentation_lru, формат 1.39).
+**Модуль 1.39.7 (план-Б rootfs2.raw, Debian guest, host the lab host)** собран/поставлен 2026-11-03..04 (DKMS bcachefs-kernel-dkms 1:1.39.7 + tools 1:1.39.7, dkms 3.2.2; источник — репозиторий Кента apt.bcachefs.org; далее директива: собирать из исходников Кента одним деревом для обеих линий Debian+Alpine). 1.39.7 > 1.39.0 — фикс дрейна в нём есть; «пол: выше фикса дрейна» в директиве — именно про это. Символический коммит фикс-семейства — тег/релиз 1.39.0 (per_dev_fragmentation_lru, формат 1.39).
 
 **Как разрулили**: (а) апгрейд на 1.39.x (архитектурный фикс); (б) Emergency kit для рецидивов: rw→ro→rw сброс аллокатора (`device set-state`), `trigger_gc` + `trigger_discards`; (в) директива 2026-11-08: модуль обеих линий — только своя сборка из дерева Кента, версия = осознанный пин выше фикса дрейна.
 
@@ -29,7 +30,7 @@
 
 ## Первичные Aug/Sep-сессии: где они
 
-На hlab диска нет: `ls ~/.pi/agent/sessions/*/2026-0*.jsonl` = 0. Memory-провайдер держит cross-machine источники (`memory-source:thinkpad/...`, `memory-source:hlab-debian/...`) — но только октябрьские; Aug/Sep ZCode-сессии в локальном индексе отсутствуют (memory.sessions: не найдены). Их содержимое пережило в: runbook 25 (полный разбор), цитатах в сессиях 2026-10-19/25/31, коммитах caf269a/9d324bf/a061ea8/776d41d.
+На the lab host диска нет: `ls ~/.pi/agent/sessions/*/2026-0*.jsonl` = 0. Memory-провайдер держит cross-machine источники (`memory-source:thinkpad/...`, `memory-source:the lab host-debian/...`) — но только октябрьские; Aug/Sep ZCode-сессии в локальном индексе отсутствуют (memory.sessions: не найдены). Их содержимое пережило в: runbook 25 (полный разбор), цитатах в сессиях 2026-10-19/25/31, коммитах caf269a/9d324bf/a061ea8/776d41d.
 
 ## Похожие, но ДРУГИЕ «no drain» (near-misses, чтобы не спутать)
 

@@ -1,3 +1,4 @@
+> English version: [build-findings.md](build-findings.md).
 # V0.3 STEP 4 REPORT — NFS-плоскость аплаенса: репетиция замкнута (2026-11-08, ночь)
 
 ## Итог: appliance несёт полный сервисный стек (boot 24, всё зелёное)
