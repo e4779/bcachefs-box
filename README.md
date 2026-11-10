@@ -20,25 +20,34 @@ alternative stack to the bcachefs FUSE port.
   swap plus a VM reboot.
 - The kernel module is **always built from Kent Overstreet's source tree**
   (never a distro package), pinned explicitly. See *Version policy*.
-- The host bridge is NFSv4, not 9p — measured, not guessed:
-  [docs/why-nfs-not-9p.md](docs/why-nfs-not-9p.md).
+- The host bridge choice (NFSv4 over 9p/sshfs) is a measured comparison,
+  not a default: [docs/bridge-comparison.md](docs/bridge-comparison.md).
 
 ## Architecture
 
-```
-        FreeBSD host
-   ┌────────────────────────────────────────────┐
-   │  consumers (media server, p2p, ...)         │
-   │        │ NFSv4 (nconnect=4, MTU 9000)       │
-   │  ┌─────▼──────┐   tap1 (bench net /30)      │
-   │  │ bhyve VM    │   run-*.sh supervisor      │
-   │  │            ◄┼── PCI passthrough ──────── pool disks (by SERIAL)
-   │  │ Alpine lts  │                             (NVMe partition + HDD)
-   │  │ squashfs ro │  OpenRC: pool-up → pool-nfs
-   │  │ bcachefs.ko │  (module 1.39.7, self-built from Kent's tree)
-   │  └────────────┘                             │
-   └────────────────────────────────────────────┘
-   Boot chain: UEFI → UKI (kernel + initramfs) → squashfs root → OpenRC
+```mermaid
+flowchart TB
+    subgraph HOST["FreeBSD host"]
+        CONS["consumers<br/>(media server, p2p, ...)"]
+        MNT["/mnt/pool"]
+        SUP["VM supervisor<br/>(serial guards, heartbeat)"]
+        TAP["tap1 — bench net /30, MTU 9000"]
+    end
+    subgraph VM["bhyve VM"]
+        UKI["UEFI → UKI<br/>(kernel + initramfs)"]
+        SQ["squashfs ro-root, OpenRC"]
+        PU["pool-up<br/>(wait disks → modprobe → mount rw)"]
+        PN["pool-nfs<br/>(rpcbind → exportfs → mountd → nfsd)"]
+        KO["bcachefs.ko<br/>(self-built from Kent's tree)"]
+    end
+    DISKS["pool disks — PCI passthrough<br/>(NVMe partition + HDD, by SERIAL)"]
+    CONS --> MNT
+    MNT ---|"NFSv4, nconnect=4"| TAP
+    TAP ---|"eth0 static"| PN
+    SUP -.->|lifecycle| VM
+    UKI --> SQ --> PU --> PN
+    PU --- KO
+    KO --- DISKS
 ```
 
 ## Proven on real hardware (2026-11 alpha run)
