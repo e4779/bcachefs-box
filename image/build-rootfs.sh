@@ -62,6 +62,7 @@ KMOD="${KMOD:-/tmp/bcachefs-kmod-build/bcachefs-dkms/fs/bcachefs/bcachefs.ko}"
 # full kernel module tree the headers were built against (inside the chroot):
 MODULES_SRC="${MODULES_SRC:-/lib/modules/$KVER}"
 
+# shellcheck disable=SC1007 -- CDPATH= prefix is the canonical suppression idiom
 SELF_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 OVERLAY="$SELF_DIR/overlay"
 

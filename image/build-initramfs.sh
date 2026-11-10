@@ -29,6 +29,7 @@ WORK="${WORK:-/tmp/bcachefsbox-build}"
 INITRD_DIR="$WORK/initramfs"
 OUT="${OUT:-$WORK/initramfs.img}"
 
+# shellcheck disable=SC1007 -- CDPATH= prefix is the canonical suppression idiom
 SELF_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 
 log() { printf 'build-initramfs: %s\n' "$*" >&2; }

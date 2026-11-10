@@ -48,6 +48,7 @@ NETASSERT_LOG=/var/log/netassert.log
 # --- declarative VM description (bhyve_config(5)) fed to bhyve -k -----------
 # Layering (host/README.md): the VM itself is described by bhyve-vm.conf;
 # lifecycle knobs (nice, stop grace, console mode) stay in the shell $CONF.
+# shellcheck disable=SC1007 -- CDPATH= prefix is the canonical suppression idiom
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 VMSAMPLE=$SCRIPT_DIR/bhyve-vm.conf.example  # repo/deploy seed (first run copies it)
 : "${VMCONF:=/vm/bcachefs-box/bhyve-vm.conf}"      # deployed declarative VM description
