@@ -1,0 +1,3 @@
+# Root may log in only from these. The appliance has exactly one console.
+console
+ttyS0

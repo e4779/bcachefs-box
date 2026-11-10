@@ -1,0 +1,19 @@
+# /etc/inittab — appliance variant (busybox init).
+#
+# Differences from the stock Alpine minirootfs inittab:
+#   - no tty1..tty6 gettys: the VM has no VGA device at all; the ONLY console
+#     is the bhyve nmdm(4) serial line, surfaced in the guest as ttyS0;
+#   - root logs in on ttyS0 with an EMPTY password. Stated loudly: this is
+#     host-gated — the nmdm device node lives on the FreeBSD host and is
+#     reachable solely through the doas-gated supervisor. Anyone who can
+#     touch that serial line already owns the host; the console grants
+#     nothing beyond it.
+::sysinit:/sbin/openrc sysinit
+::sysinit:/sbin/openrc boot
+::wait:/sbin/openrc default
+
+ttyS0::respawn:/sbin/getty -L ttyS0 115200 vt100
+
+::ctrlaltdel:/sbin/reboot
+
+::shutdown:/sbin/openrc shutdown

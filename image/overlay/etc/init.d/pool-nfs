@@ -1,46 +1,4 @@
-#!/sbin/openrc-run
-description="NFS export of /pool (self-contained appliance unit, v4-first + v3)"
 depend() {
 	need pool-up
-}
-
-start() {
-	# rpcbind: not needed for NFSv4, kept for v3 + diagnostics
-	ebegin "Starting rpcbind (foreground daemon)"
-	pgrep -x rpcbind >/dev/null || rpcbind -f -s &
-	sleep 1
-	pgrep -x rpcbind >/dev/null
-	eend $? || return 1
-
-	# NOTE: rpc.statd deliberately omitted — NFSv4 has no NSM/NLM.
-
-	ebegin "Mounting nfsd filesystem"
-	mountpoint -q /proc/fs/nfsd || mount -t nfsd nfsd /proc/fs/nfsd
-	eend $? || return 1
-
-	ebegin "Exporting /pool"
-	exportfs -ra
-	eend $? || return 1
-
-	ebegin "Starting mountd (v3 path)"
-	rpc.mountd
-	sleep 1
-	pgrep -x rpc.mountd >/dev/null
-	eend $? || return 1
-
-	ebegin "Starting nfsd"
-	rpc.nfsd 8
-	eend $?
-}
-
-stop() {
-	ebegin "Stopping nfsd"
-	rpc.nfsd 0
-	eend $?
-	ebegin "Stopping mountd"
-	killall -q rpc.mountd 2>/dev/null || true
-	eend 0
-	ebegin "Unexporting"
-	exportfs -ua
-	eend $?
+	after networking
 }

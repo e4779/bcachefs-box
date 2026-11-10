@@ -1,2 +1,7 @@
+# Read-only-root appliance: everything volatile is tmpfs.
+# /var: full tmpfs overlay (pattern borrowed from freebsd-wifibox-alpine) —
+# busybox syslogd and nfs-utils state live under /var on a read-only root.
+# The /var/lib/nfs line nests on top so NFS state survives /var turnover.
+tmpfs /var         tmpfs defaults,nosuid,mode=0755 0 0
 tmpfs /var/lib/nfs tmpfs defaults,nosuid,mode=0755 0 0
-tmpfs /tmp tmpfs defaults,nosuid,mode=1777 0 0
+tmpfs /tmp         tmpfs defaults,nosuid,mode=1777 0 0

@@ -1,0 +1,23 @@
+# /etc/exports — what pool-nfs publishes (`exportfs -ra` reads this file).
+#
+# /pool is the bcachefs pool mount (see init.d/pool-up). The appliance serves
+# exactly ONE client across the point-to-point "bench net" /30: the guest is
+# 172.31.255.2 (see network/interfaces), the bench client on the host side is
+# 172.31.255.1. This /30 is a private lab link, not a LAN — replace the
+# client spec with YOUR client before using the image anywhere else:
+#
+#     192.0.2.10/32(rw,...)     # one client host
+#     192.0.2.0/24(rw,...)      # one subnet — think twice with the flags below
+#
+# Option set (parity with the line the production pool ran):
+#   rw                 read-write export;
+#   insecure           accept client source ports >1024 (unprivileged clients
+#                      bind high);
+#   no_subtree_check   suppress subtree filehandle checks — standard for a
+#                      volume-wide export, avoids "stale file handle" churn
+#                      when files move under a mounted client;
+#   no_root_squash     client root maps to server root — required by the bench
+#                      protocol (root-owned test trees), safe ONLY on a
+#                      point-to-point link. LOUD: never widen the client spec
+#                      on a shared network while this flag is set.
+/pool 172.31.255.1/30(rw,insecure,no_subtree_check,no_root_squash)

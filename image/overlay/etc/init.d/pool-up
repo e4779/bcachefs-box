@@ -1,33 +1,84 @@
 #!/sbin/openrc-run
-description="Mount bcachefs pool at /pool"
+# Mount the two-member bcachefs pool at /pool.
+#
+# Identity model — read before "simplifying" this unit:
+#   The sealed appliance carries NO bcachefs tools (no show-super, no fsck),
+#   so member identity cannot be verified in-guest — there is no tooling to
+#   ask. The guarantee is layered instead:
+#     1. host-side: the supervisor PCI-attaches exactly the two pool disks
+#        (matched by serial) into slots 3 and 4;
+#     2. guest-side, this unit: BOTH members must be present before mount,
+#        and a degraded (single-member) mount is always refused.
+#   Slots map to /dev/vdb + /dev/vdc in the guest. Different slot plan?
+#   Override MEMBERS in /etc/conf.d/pool-up (sourced by OpenRC).
+#
+# Failure posture (no silent rc 1 — the alpha incident taught why):
+#   member missing  -> loud refusal, see docs/RECOVERY.md
+#   mount failure   -> "pool likely needs fsck", see docs/RECOVERY.md
+
+description="Mount bcachefs pool (both members) at /pool"
 
 depend() {
 	need sysfs
 	after localmount
 }
 
+# Both members, guest device order. bcachefs mounts the pool SET: naming the
+# first member is enough — the kernel assembles the other registered members.
+MEMBERS="${MEMBERS:-/dev/vdb /dev/vdc}"
+WAIT_SECS="${WAIT_SECS:-30}"
+
 start() {
-	ebegin "Waiting for pool device /dev/vdb"
-	i=0
-	while [ $i -lt 10 ] && [ ! -b /dev/vdb ]; do sleep 1; i=$((i+1)); done
-	if [ ! -b /dev/vdb ]; then
-		eend 1 "pool device /dev/vdb not found"
+	local waited=0 dev missing
+
+	ebegin "Waiting for pool members: $MEMBERS"
+	while [ "$waited" -lt "$WAIT_SECS" ]; do
+		missing=""
+		for dev in $MEMBERS; do
+			[ -b "$dev" ] || missing="$missing $dev"
+		done
+		[ -z "$missing" ] && break
+		sleep 1
+		waited=$((waited + 1))
+	done
+	if [ -n "$missing" ]; then
+		eend 1
+		eerror "pool member missing:$missing — refusing; see docs/RECOVERY.md"
+		eerror "a bcachefs pool is never mounted degraded (one member short):"
+		eerror "half-pool rw access can diverge members beyond fsck repair"
 		return 1
 	fi
+	eend 0
+
 	ebegin "Loading bcachefs module"
 	modprobe bcachefs
-	rc=$?
-	eend $rc
-	[ $rc -ne 0 ] && return 1
+	modrc=$?
+	eend "$modrc"
+	if [ "$modrc" -ne 0 ]; then
+		eerror "modprobe bcachefs failed — is /lib/modules complete? (see image/build-rootfs.sh)"
+		return 1
+	fi
+
 	ebegin "Mounting bcachefs pool at /pool"
-	mount -t bcachefs /dev/vdb /pool
-	rc=$?
-	eend $rc
-	return $rc
+	mount -t bcachefs "${MEMBERS%% *}" /pool
+	mountrc=$?
+	eend "$mountrc"
+	if [ "$mountrc" -ne 0 ]; then
+		eerror "mount failed — pool likely needs fsck; see docs/RECOVERY.md"
+		eerror "(the appliance carries no fsck by design; recovery runs in a builder VM)"
+		return 1
+	fi
+	return 0
 }
 
 stop() {
 	ebegin "Unmounting bcachefs pool"
 	umount /pool
-	eend $?
+	umrc=$?
+	eend "$umrc"
+	if [ "$umrc" -ne 0 ]; then
+		eerror "umount failed (pool busy) — stop consumers instead of forcing; a dirty stop means fsck (docs/RECOVERY.md)"
+		return 1
+	fi
+	return 0
 }
